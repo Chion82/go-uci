@@ -82,11 +82,16 @@ type Tree interface {
 
 	// DelSection remove a config section and its options.
 	DelSection(config, section string)
+
+	// SetUpdateLogger sets the logger function called whenever changing the config.
+	SetUpdateLogger(logFunc func(string))
 }
 
 type tree struct {
 	dir     string
 	configs map[string]*config
+
+	loggerFunc func(string)
 
 	sync.Mutex
 }
@@ -253,6 +258,10 @@ func (t *tree) SetType(config, section, option string, typ OptionType, values ..
 	t.Lock()
 	defer t.Unlock()
 
+	if t.loggerFunc != nil {
+		t.loggerFunc(fmt.Sprintf("uci: set %s.%s.%s=%s", config, section, option, values))
+	}
+
 	cfg, ok := t.ensureConfigLoaded(config)
 	if !ok {
 		return false
@@ -282,6 +291,10 @@ func (t *tree) Del(config, section, option string) {
 	t.Lock()
 	defer t.Unlock()
 
+	if t.loggerFunc != nil {
+		t.loggerFunc(fmt.Sprintf("uci: delete %s.%s.%s", config, section, option))
+	}
+
 	cfg, ok := t.ensureConfigLoaded(config)
 	if !ok {
 		// we want to delete option, but neither config, nor section,
@@ -304,6 +317,10 @@ func (t *tree) AddSection(config, section, typ string) error {
 	t.Lock()
 	defer t.Unlock()
 
+	if t.loggerFunc != nil {
+		t.loggerFunc(fmt.Sprintf("uci: add section %s.%s type=%s", config, section, typ))
+	}
+
 	cfg, ok := t.ensureConfigLoaded(config)
 	if !ok {
 		cfg = newConfig(config)
@@ -311,7 +328,7 @@ func (t *tree) AddSection(config, section, typ string) error {
 		t.configs[config] = cfg
 	}
 	sec := cfg.Get(section)
-	if sec == nil {
+	if section == "" || sec == nil {
 		cfg.Add(newSection(typ, section))
 		cfg.tainted = true
 		return nil
@@ -325,6 +342,10 @@ func (t *tree) AddSection(config, section, typ string) error {
 func (t *tree) DelSection(config, section string) {
 	t.Lock()
 	defer t.Unlock()
+
+	if t.loggerFunc != nil {
+		t.loggerFunc(fmt.Sprintf("uci: delete section %s.%s", config, section))
+	}
 
 	cfg, ok := t.ensureConfigLoaded(config)
 	if !ok {
@@ -377,6 +398,12 @@ func (t *tree) saveConfig(c *config) error {
 
 	c.tainted = false
 	return nil
+}
+
+func (t *tree) SetUpdateLogger(logFunc func(string)) {
+	t.Mutex.Lock()
+	t.loggerFunc = logFunc
+	t.Mutex.Unlock()
 }
 
 // tmpFile is used by *tree.saveConfig to create/update a config file.

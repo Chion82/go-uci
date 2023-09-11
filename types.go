@@ -183,7 +183,7 @@ func (c *config) Merge(s *section) *section {
 func (c *config) Del(name string) {
 	var i int
 	for i = 0; i < len(c.Sections); i++ {
-		if c.Sections[i].Name == name {
+		if c.sectionName(c.Sections[i]) == name {
 			break
 		}
 	}
