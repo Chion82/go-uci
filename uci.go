@@ -40,6 +40,10 @@ type Tree interface {
 	// in a config, and a boolean indicating whether the config file exists.
 	GetSections(config, secType string) ([]string, bool)
 
+	// FindSectionByOption returns the name of the section which contains
+	// the matching option, or empty string if no such matching section.
+	FindSectionByOption(config, secType, option, value string) string
+
 	// Get retrieves (all) values for a fully qualified option, and a
 	// boolean indicating whether the config file and the config section
 	// within exists.
@@ -71,6 +75,13 @@ type Tree interface {
 	// files and sections, you first need to initialize them with
 	// AddSection().
 	SetType(config, section, option string, typ OptionType, values ...string) bool
+
+	// AddListElement appends element to list.
+	// If the list option does not exist, it will create a new one.
+	AddListElement(config, section, option, value string) bool
+
+	// DelListElement removes element from the given list
+	DelListElement(config, section, option, value string)
 
 	// Del removes a fully qualified option.
 	Del(config, section, option string)
@@ -311,6 +322,42 @@ func (t *tree) Del(config, section, option string) {
 	if sec.Del(option) {
 		cfg.tainted = true
 	}
+}
+
+func (t *tree) AddListElement(config, section, option, value string) bool {
+	list := make([]string, 0)
+	current, ok := t.Get(config, section, option)
+	if ok {
+		list = current
+	}
+	list = append(list, value)
+	return t.SetType(config, section, option, TypeList, list...)
+}
+
+func (t *tree) DelListElement(config, section, option, value string) {
+	list := make([]string, 0)
+	current, _ := t.Get(config, section, option)
+	for _, c := range current {
+		if c != value {
+			list = append(list, c)
+		}
+	}
+	if len(list) == 0 {
+		t.Del(config, section, option)
+	} else {
+		t.SetType(config, section, option, TypeList, list...)
+	}
+}
+
+func (t *tree) FindSectionByOption(config, secType, option, value string) string {
+	sections, _ := t.GetSections(config, secType)
+	for _, sec := range sections {
+		vals, _ := t.Get(config, sec, option)
+		if len(vals) > 0 && vals[0] == value {
+			return sec
+		}
+	}
+	return ""
 }
 
 func (t *tree) AddSection(config, section, typ string) error {
